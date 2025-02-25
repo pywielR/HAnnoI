@@ -13,9 +13,11 @@ The program also tracks and exports the coordinates of each item, allowing for s
 
 
 ## Installation
-It is recommended to create a new environment in some directory on your system, for example using the Powershell Prompt in Anaconda. Within this environment, paste the HWAnno.py file as well as the requirements.txt file.
+Download the HWAnno.py file as well as the requirements.txt and put them in some folder on your system. It is recommended to create a new environment in this directory, for example using the Powershell Prompt in Anaconda (https://www.anaconda.com/download/success).
 
-Using Anaconda, within the Powershell Prompt, an environment may be created using this command: 'conda create --name HWAnno python=3.12'
+Using Anaconda, within the Powershell Prompt, first navigate to the folder containing the above mentioned files: 'cd Path/To/Your/Folder'
+
+An environment may then be created using this command: 'conda create --name HWAnno python=3.12'
 
 After that, activate the environment: 'conda activate HWAnno'
 
