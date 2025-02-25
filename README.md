@@ -23,6 +23,6 @@ After that, activate the environment: 'conda activate HWAnno'
 
 After that, install all required packages, using this command: 'pip install -r requirements.txt'
 
-Is the last command does not work, try to install pip in the HWAnno environment first: 'conda install pip'
+If the last command does not work, try to install pip in the HWAnno environment first: 'conda install pip'
 
 When all required packages are installed, the program may then be started using this command: 'python HWAnno.py'
