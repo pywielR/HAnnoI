@@ -4,7 +4,7 @@
 HWAnno is a GUI application that was developed for annotating single letters in handwritten data. Its core functionalities include:
 
 - importing single images or PDF files with one image per site
-- marking rectangular areas (from now on referred to as items) within imported images
+- marking rectangular areas (referred to as items) within imported images
 - annotating each individual item on user defined dimensions
 - exporting annotations as a CSV file, which can be imported again to continue working with them
 - making screenshots of each individual item within the images
