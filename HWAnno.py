@@ -267,6 +267,7 @@ class MainWindow(QMainWindow):
         menu.addAction(csv_action)
 
         export_action = QAction('Export', self)
+        export_action.setShortcut('Ctrl+S')
         export_action.setStatusTip('Export all annotations to CSV file')
         export_action.triggered.connect(self.export_annotations)
         menu.addAction(export_action)
@@ -277,6 +278,7 @@ class MainWindow(QMainWindow):
         menu.addAction(screenshot_action)
 
         add_action = QAction('Add Item', self)
+        add_action.setShortcut('Ctrl+A')
         add_action.setStatusTip('Add item to current page')
         add_action.triggered.connect(self.add_item)
         toolbar.addAction(add_action)
