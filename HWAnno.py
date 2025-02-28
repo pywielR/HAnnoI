@@ -787,10 +787,34 @@ class MainWindow(QMainWindow):
             item[0].setRect(0, 0, int(self.rect_x.text()), int(self.rect_y.text()))
 
             # update coordinates dictionary:
-            self.item_coords[item[0]] = [round(item[0].x(), 2), round(item[0].y(), 2), item[0].rect().width(),
+            self.item_coords[item[0]] = [round(item[0].x(), 2),
+                                         round(item[0].y(), 2),
+                                         item[0].rect().width(),
                                          item[0].rect().height()]
             self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
             # self.adjust_helperLines()  # <- adjust helper lines accordingly
+
+    # this function is for resizing items with the mouse
+    def resize_item(self, x, y):
+        item = self.scene.selectedItems()
+        if len(item) == 1:
+            width_change = item[0].x() - x
+            height_change = item[0].y() - y
+
+            new_width = item[0].rect().width() - width_change
+            new_height = item[0].rect().height() - height_change
+
+            # only resize if new width and height is above 0:
+            if int(new_width) > 0 and int(new_height) > 0:
+                item[0].setRect(0, 0, int(new_width), int(new_height))
+
+        # update coordinates dictionary:
+        self.item_coords[item[0]] = [round(item[0].x(), 2),
+                                     round(item[0].y(), 2),
+                                     item[0].rect().width(),
+                                     item[0].rect().height()]
+        self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
+        # self.adjust_helperLines()  # <- adjust helper lines accordingly
 
     # delete currently selected item (and update dictionaries accordingly)
     def delete_item(self):
@@ -1446,6 +1470,46 @@ class MainWindow(QMainWindow):
                 elif event.key() == Qt.Key.Key_Space:
                     # press Space to re-center the helper lines
                     self.set_anchor()
+
+        # pressing/releasing Alt (without any modifier) has to purposes:
+        # (1) it toggles all items movable on pressing alt / immovable on releasing alt
+        # (2) if an item is selected, it places another rectangle on top, which can be dragged around to adjust the size
+        # of the selected item; this adjustment happens on release of Alt
+        if event.key() == Qt.Key.Key_Alt:
+            self.toggle_action.setChecked(True)
+            self.toggle_items()
+
+            item = self.scene.selectedItems()
+            if len(item) == 1:
+                self.sizer = QGraphicsRectItem(0, 0, item[0].rect().width(), item[0].rect().height())
+
+                self.sizer.setPos(item[0].x(), item[0].y())
+
+                self.sizer.setPen(self.rect_pen)
+                self.sizer.setZValue(2)
+                self.sizer.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+
+                self.scene.addItem(self.sizer)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Alt:
+            self.toggle_action.setChecked(False)
+            self.toggle_items()
+
+            # this is the keyRelease-part to the item resizing function;
+            # only on release is the actual resizing triggered
+            item = self.scene.selectedItems()
+            if len(item) == 1:
+                x = self.sizer.x()
+                y = self.sizer.y()
+
+                self.resize_item(x, y)
+                self.scene.removeItem(self.sizer)
+            else:
+                try:
+                    self.scene.removeItem(self.sizer)
+                except:
+                    return
 
 
 app = QApplication(sys.argv)
