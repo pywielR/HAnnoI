@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, QFi
                              QWidget, QSpinBox, QGraphicsItem, QGraphicsScene, QGraphicsWidget, QToolBar, QGraphicsView,
                              QGraphicsRectItem, QStatusBar, QMenu, QDialog, QLineEdit, QInputDialog, QGridLayout,
                              QFrame, QGraphicsLineItem, QTabWidget, QSpacerItem, QComboBox)
-from PyQt6.QtGui import QAction, QIcon, QPixmap, QPen, QPainter, QColor, QPolygonF
+from PyQt6.QtGui import QAction, QIcon, QPixmap, QPen, QPainter, QColor, QPolygonF, QMouseEvent, QCursor
 
 '''
 ((1)) Custom GraphicsView to integrate into main window
@@ -126,6 +126,7 @@ class MainWindow(QMainWindow):
 
         # item (i.e. rectangle) settings
         self.rect_x = QSpinBox()  # for width
+        self.rect_x.setValue(50)
         self.rect_x.setMaximum(1000)
         self.rect_x.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         rect_width = QLabel('Width of new item:')
@@ -133,6 +134,7 @@ class MainWindow(QMainWindow):
         rect_width.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         self.rect_y = QSpinBox()  # for height
+        self.rect_y.setValue(50)
         self.rect_y.setMaximum(1000)
         self.rect_y.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         rect_height = QLabel('Height of new item:')
@@ -267,7 +269,6 @@ class MainWindow(QMainWindow):
         menu.addAction(csv_action)
 
         export_action = QAction('Export', self)
-        export_action.setShortcut('Ctrl+S')
         export_action.setStatusTip('Export all annotations to CSV file')
         export_action.triggered.connect(self.export_annotations)
         menu.addAction(export_action)
@@ -278,8 +279,8 @@ class MainWindow(QMainWindow):
         menu.addAction(screenshot_action)
 
         add_action = QAction('Add Item', self)
-        add_action.setShortcut('Ctrl+A')
         add_action.setStatusTip('Add item to current page')
+        add_action.setShortcut('Ctrl+R')
         add_action.triggered.connect(self.add_item)
         toolbar.addAction(add_action)
         self.context_menu.addAction(add_action)
@@ -1320,7 +1321,7 @@ class MainWindow(QMainWindow):
 
             # Control modifier allows for 1 pixel size adjustments to selected rectangle:
             if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-                if event.key() == Qt.Key.Key_Left:
+                if event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_A:
                     item[0].setRect(0, 0, int(item[0].rect().width()) - 1, int(item[0].rect().height()))
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1330,7 +1331,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Right:
+                elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setRect(0, 0, int(item[0].rect().width()) + 1, int(item[0].rect().height()))
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1340,7 +1341,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Up:
+                elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) - 1)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1350,7 +1351,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Down:
+                elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) + 1)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1387,7 +1388,7 @@ class MainWindow(QMainWindow):
 
             # Shift modifier allows for 5 pixel size adjustments to selected rectangle:
             elif event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
-                if event.key() == Qt.Key.Key_Left:
+                if event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_A:
                     item[0].setRect(0, 0, int(item[0].rect().width()) - 5, int(item[0].rect().height()))
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1397,7 +1398,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Right:
+                elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setRect(0, 0, int(item[0].rect().width()) + 5, int(item[0].rect().height()))
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1407,7 +1408,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Up:
+                elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) - 5)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1417,7 +1418,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Down:
+                elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) + 5)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1429,7 +1430,7 @@ class MainWindow(QMainWindow):
 
             # Without any modifier, the position of the rectangle can be adjusted in 1 pixel increments
             else:
-                if event.key() == Qt.Key.Key_Left:
+                if event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_A:
                     item[0].setPos(item[0].x() - 1, item[0].y())
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1439,7 +1440,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Right:
+                elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setPos(item[0].x() + 1, item[0].y())
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1449,7 +1450,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Up:
+                elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setPos(item[0].x(), item[0].y() - 1)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1459,7 +1460,7 @@ class MainWindow(QMainWindow):
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
                     # self.adjust_helperLines()  # <- helper lines follow movement
 
-                elif event.key() == Qt.Key.Key_Down:
+                elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setPos(item[0].x(), item[0].y() + 1)
                     # update coordinates dictionary
                     self.item_coords[item[0]] = [round(item[0].x(), 2),
@@ -1508,10 +1509,8 @@ class MainWindow(QMainWindow):
                 self.resize_item(x, y)
                 self.scene.removeItem(self.sizer)
             else:
-                try:
-                    self.scene.removeItem(self.sizer)
-                except:
-                    return
+                try: self.scene.removeItem(self.sizer)
+                except: return
 
 
 app = QApplication(sys.argv)
