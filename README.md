@@ -26,3 +26,8 @@ After that, install all required packages, using this command: 'pip install -r r
 If the last command does not work, try to install pip in the HWAnno environment first: 'conda install pip'
 
 When all required packages are installed, the program may then be started using this command: 'python HWAnno.py'
+
+
+## Features
+
+![test](https://ruhr-uni-bochum.sciebo.de/s/JDtFnw6gTg89KyM)
