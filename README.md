@@ -30,4 +30,4 @@ When all required packages are installed, the program may then be started using 
 
 ## Features
 
-![test](https://ruhr-uni-bochum.sciebo.de/s/JDtFnw6gTg89KyM)
+![test](https://ruhr-uni-bochum.sciebo.de/s/JDtFnw6gTg89KyM/HWAnno_01.gif)
