@@ -9,7 +9,7 @@ HAnnoI is a GUI application that was developed for annotating single letters in 
 - exporting annotations as a CSV file, which can be imported again to continue working
 - making screenshots of each individual item within the images
 
-The program also tracks and exports the coordinates of each item, allowing for subsequent analyses of this data. Though HWAnno was developed for one specific use case, its functionalities are not bound to scans of handwritten data.
+The program also tracks and exports the coordinates of each item, allowing for subsequent analyses of this data. Though HAnnoI was developed for one specific use case, its functionalities are not bound to scans of handwritten data.
 
 
 ## Installation
