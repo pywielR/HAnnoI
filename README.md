@@ -1,7 +1,7 @@
 # HAnnoI: Handwriting Annotation Interface
 
 ## Description
-HWAnno is a GUI application that was developed for annotating single letters in handwritten data. Its core functionalities include:
+HAnnoI is a GUI application that was developed for annotating single letters in handwritten data. Its core functionalities include:
 
 - importing single images or PDF files with one image per site
 - marking rectangular areas (referred to as items) within imported images
