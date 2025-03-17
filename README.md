@@ -1,4 +1,4 @@
-# HWAnno: Handwriting Annotator
+# HAnnoI: Handwriting Annotation Interface
 
 ## Description
 HWAnno is a GUI application that was developed for annotating single letters in handwritten data. Its core functionalities include:
