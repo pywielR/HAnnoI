@@ -21,26 +21,23 @@ class GraphicsView(QGraphicsView):
     def __init__(self, scene):
         super().__init__(scene)
 
-        self.is_dragging = False
+        self.is_pressed = False
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setFocusPolicy(
             Qt.FocusPolicy.NoFocus)  # <- this is needed so that rectangle positions may be adjusted via arrow keys
 
     ## Below are functions to navigate the viewer (zoom in and out of scene, drag around)
     def wheelEvent(self, event):
-        # Get the delta of the wheel event
         angle = event.angleDelta().y()
         if angle > 0:
-            self.scale(1.2, 1.2)  # Zoom in
+            self.scale(1.2, 1.2)  # Zoom in sensitivity
         else:
-            self.scale(1 / 1.2, 1 / 1.2)  # Zoom out
+            self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
         event.accept()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Start dragging
-            self.is_dragging = True
-            self.last_pos = event.pos()
+            self.is_pressed = True
             self.mouse_pressed_signal.emit(event.pos())
 
         if event.button() == Qt.MouseButton.RightButton:
@@ -49,17 +46,11 @@ class GraphicsView(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         self.mouse_pressed_signal.emit(event.pos())
-        if self.is_dragging:
-            # Calculate the distance moved
-            delta = event.pos() - self.last_pos
-            self.translate(delta.x(), delta.y())  # Move the view
-            self.last_pos = event.pos()  # Update last position
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Stop dragging
-            self.is_dragging = False
+            self.is_pressed = False
             self.mouse_pressed_signal.emit(event.pos())
 
         if event.button() == Qt.MouseButton.RightButton:
@@ -83,6 +74,7 @@ class MainWindow(QMainWindow):
         ## Dictionaries that store all items within the scene
         self.item_dict = dict()  # <- for annotations
         self.item_coords = dict()  # <- for coordinates and shape of items
+        self.item_colors = dict()  # <- this stores the color of each item
         self.item_anchors = dict()  # <- this stores the baselines of each item
         self.item_index = dict()  # <- for item index
 
@@ -96,6 +88,7 @@ class MainWindow(QMainWindow):
         self.dim_counter = 1
 
         self.current_key = 'Dims'
+        self.current_color = None
 
         # dictionary that - for each page - stores all items placed on the page
         self.page_items = dict()
@@ -109,7 +102,7 @@ class MainWindow(QMainWindow):
         self.scene_pos = QPoint()
 
         ## General Main Window and Layout settings
-        self.setWindowTitle('HWAnno: Handwriting Annotator')
+        self.setWindowTitle('HAnnoI: Handwriting Annotation Interface')
         self.resize(1080, 720)
 
         menu = self.menuBar()
@@ -141,10 +134,10 @@ class MainWindow(QMainWindow):
         rect_height.setAlignment(Qt.AlignmentFlag.AlignRight)
         rect_height.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        rect_col = QComboBox()  # for color
-        rect_col.addItems(['red', 'green', 'blue'])
-        rect_col.currentIndexChanged.connect(self.set_pen)
-        rect_colLab = QLabel('Color of new item:')
+        self.rect_col = QComboBox()  # for color
+        self.rect_col.addItems(['red', 'green', 'blue'])
+        self.rect_col.currentIndexChanged.connect(self.setColor)
+        rect_colLab = QLabel('Color:')
         rect_colLab.setAlignment(Qt.AlignmentFlag.AlignRight)
         rect_colLab.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
@@ -154,14 +147,14 @@ class MainWindow(QMainWindow):
         # establish scene in which the to be annotated document is displayed / items for annotation are placed in
         self.scene = QGraphicsScene(0, 0, 0, 0)
         self.view = GraphicsView(self.scene)
-        self.view.mouse_pressed_signal.connect(self.mouse_tracker)
+        self.view.mouse_pressed_signal.connect(self.mouseTracker)
 
         # per default one tab; additional tabs are added to match page count of loaded document
         self.view_tabs = QTabWidget()
         self.view_tabs.setTabPosition(QTabWidget.TabPosition.West)
         self.view_tabs.addTab(self.view, 'Page 1')
 
-        self.view_tabs.currentChanged.connect(self.change_page)  # <- triggers when changing current tab
+        self.view_tabs.currentChanged.connect(self.changePage)  # <- triggers when changing current tab
 
         # set up grid layout for graphical side of application (mainly picture and item display)
         view_layout = QGridLayout()
@@ -170,7 +163,7 @@ class MainWindow(QMainWindow):
         view_layout.addWidget(rect_height, 0, 12)
         view_layout.addWidget(self.rect_y, 0, 13)
         view_layout.addWidget(rect_colLab, 0, 14)
-        view_layout.addWidget(rect_col, 0, 15)
+        view_layout.addWidget(self.rect_col, 0, 15)
         view_layout.setColumnMinimumWidth(13, 10)
 
         view_layout.addWidget(self.view_tabs, 1, 0, 1, 16)
@@ -186,10 +179,10 @@ class MainWindow(QMainWindow):
         anno_top_widget = QGridLayout()
 
         self.anno_sheetLab = QPushButton('Document:')
-        self.anno_sheetTxt = QLabel('No document loaded')
+        self.anno_sheetTxt = QLabel('No document/image loaded')
 
         self.anno_pageLab = QPushButton('Page number:')
-        self.anno_pageTxt = QLabel('No document loaded')
+        self.anno_pageTxt = QLabel('No document/image loaded')
 
         self.anno_indexLab = QPushButton('Item index:')
         self.anno_indexLab.setStatusTip('Change index of currently selected item')
@@ -202,7 +195,7 @@ class MainWindow(QMainWindow):
         self.anno_anchorTxt = QLabel('No item selected')
 
         # self.anno_pageLab.pressed.connect(self.change_page)
-        self.anno_indexLab.pressed.connect(self.update_index)
+        self.anno_indexLab.pressed.connect(self.updateIndex)
 
         anno_top_widget.addWidget(self.anno_sheetLab, 0, 0)
         anno_top_widget.addWidget(self.anno_sheetTxt, 0, 1)
@@ -253,66 +246,68 @@ class MainWindow(QMainWindow):
         # Toolbar + Context Menu Actions (== Signals for Slots)
         image_action = QAction('Single Image', self)
         image_action.setStatusTip('Import single image for annotation')
-        image_action.triggered.connect(self.img_import)
+        image_action.triggered.connect(self.imgImport)
 
         pdf_action = QAction('From PDF', self)
         pdf_action.setStatusTip('Import images from PDF file')
-        pdf_action.triggered.connect(self.pdf_import)
+        pdf_action.triggered.connect(self.pdfImport)
 
         new_menu = menu.addMenu('New')
         new_menu.addAction(image_action)
         new_menu.addAction(pdf_action)
 
-        csv_action = QAction('Continue', self)
+        csv_action = QAction('Import CSV', self)
         csv_action.setStatusTip('Import CSV to continue working')
-        csv_action.triggered.connect(self.csv_import)
-        menu.addAction(csv_action)
+        csv_action.triggered.connect(self.csvImport)
+
+        scheme_action = QAction('Import Scheme', self)
+        scheme_action.setStatusTip('Import annotation scheme from CSV file')
+        scheme_action.triggered.connect(self.schemeImport)
+
+        import_menu = menu.addMenu('Import')
+        import_menu.addAction(csv_action)
+        import_menu.addAction(scheme_action)
 
         export_action = QAction('Export', self)
         export_action.setStatusTip('Export all annotations to CSV file')
-        export_action.triggered.connect(self.export_annotations)
+        export_action.triggered.connect(self.exportAnnotations)
         menu.addAction(export_action)
 
         screenshot_action = QAction('Render', self)
         screenshot_action.setStatusTip('Render screenshots')
-        screenshot_action.triggered.connect(self.make_screens)
+        screenshot_action.triggered.connect(self.takeScreenshots)
         menu.addAction(screenshot_action)
 
         add_action = QAction('Add Item', self)
         add_action.setStatusTip('Add item to current page')
         add_action.setShortcut('Ctrl+R')
-        add_action.triggered.connect(self.add_item)
+        add_action.triggered.connect(self.addItem)
         toolbar.addAction(add_action)
         self.context_menu.addAction(add_action)
 
         change_action = QAction('Adjust Item', self)
         change_action.setStatusTip('Change size of currently selected item')
-        change_action.triggered.connect(self.adjust_item)
+        change_action.triggered.connect(self.adjustItem)
         toolbar.addAction(change_action)
 
         delete_action = QAction('Delete Item', self)
         delete_action.setStatusTip('Delete currently selected item')
-        delete_action.triggered.connect(self.delete_item)
+        delete_action.triggered.connect(self.deleteItem)
         toolbar.addAction(delete_action)
 
         self.toggle_action = QAction('Toggle Immovable', self)
-        self.toggle_action.setStatusTip('Toggle Immovable')
+        self.toggle_action.setStatusTip('Toggle immovable')
         self.toggle_action.setCheckable(True)
-        self.toggle_action.triggered.connect(self.toggle_items)
+        self.toggle_action.triggered.connect(self.toggleItems)
         toolbar.addAction(self.toggle_action)
 
-        functions_menu = menu.addMenu('Functions')
-
-        letter_function = QAction('Letter Search Function', self)
-        letter_function.setStatusTip('Define letter search function')
-        letter_function.triggered.connect(self.letter_search_function)
-        functions_menu.addAction(letter_function)
-        self.letter = QLabel('')
-        self.layer = QLabel('')
+        self.recolor_action = QAction('Recolor Mode', self)
+        self.recolor_action.setStatusTip('Toggle item recoloring mode')
+        self.recolor_action.setCheckable(True)
+        toolbar.addAction(self.recolor_action)
 
         # this Signal triggers updating all annotation input lines to match the currently selected rectangle:
-        self.scene.selectionChanged.connect(self.change_key)
-        # self.helper_lineStatus = False
+        self.scene.selectionChanged.connect(self.changeKey)
         self.anchorStatus = False
 
     '''
@@ -320,36 +315,39 @@ class MainWindow(QMainWindow):
     '''
 
     '''
-    ((3.1)) Import functions (single image, PDF or CSV)
+    ((3.1)) Import functions (single image, PDF,  CSV, annotation scheme)
     '''
     # load single image for annotation (CURRENTLY NOT IN USE)
-    def img_import(self):
+    def imgImport(self):
         self.scene.clearSelection()
         self.view_tabs.setCurrentIndex(0)
 
         fname = QFileDialog.getOpenFileName(self, 'Open Image', './', '(*.png *.jpg *.jpeg *.bmp)',)
 
+        self.anno_sheetTxt.setText('No document/image loaded')
+        self.anno_pageTxt.setText('No document/image loaded')
+
         if len(fname[0]) > 0:
-
             self.scene.clear()
-
-            self.clear_dictionaries()
-            self.clear_annoTabs()
-
-            # self.anno_sheetTxt.setText('No work sheet selected')
+            self.clearDictionaries()
+            self.clearAnnotationTab()
 
             # remove all view tabs but the first one:
             for i in reversed(range(list(self.page_items.keys())[-1])):
-                if i == 0:
-                    break
-                else:
-                    self.view_tabs.removeTab(i)
+                if i == 0: break
+                else: self.view_tabs.removeTab(i)
 
             self.page_index = dict()
             self.page_items = dict()
 
+            # clear temp folder to avoid conflicts
+            temp_path = Path('./temp')
+            for temp_file in temp_path.iterdir():
+                if temp_file.is_file(): temp_file.unlink()
+
             file = fname[0].split('/')
             self.anno_sheetTxt.setText(file[-1])  # <- adds name of current work sheet to program
+            self.anno_pageTxt.setText(str(1))
 
             self.scene.addPixmap(QPixmap(fname[0]))
             self.scene.items()[0].setZValue(1)
@@ -358,76 +356,72 @@ class MainWindow(QMainWindow):
             self.page_items[1] = []
 
     # load in PDF file to annotate all pages
-    def pdf_import(self):
+    def pdfImport(self):
         self.scene.clearSelection()
         self.view_tabs.setCurrentIndex(0)
 
         fname = QFileDialog.getOpenFileName(self, 'Open Image', './', '(*.pdf)',)
 
         if len(fname[0]) > 0:
-
             # STEP 1: CLEAR EVERYTHING
             self.scene.clear()
+            self.clearDictionaries()
+            self.clearAnnotationTab()
+        else: return
 
-            self.clear_dictionaries()
-            self.clear_annoTabs()
+        # remove all view tabs but the first one:
+        for i in reversed(range(list(self.page_items.keys())[-1])):
+            if i == 0: break
+            else: self.view_tabs.removeTab(i)
 
-            # remove all view tabs but the first one:
-            for i in reversed(range(list(self.page_items.keys())[-1])):
-                if i == 0:
-                    break
-                else:
-                    self.view_tabs.removeTab(i)
+        self.page_index = dict()
+        self.page_items = dict()
 
-            self.page_index = dict()
-            self.page_items = dict()
+        # clear temp folder to avoid conflicts
+        temp_path = Path('./temp')
+        for temp_file in temp_path.iterdir():
+            if temp_file.is_file(): temp_file.unlink()
 
-            # clear temp folder to avoid conflicts
-            temp_path = Path('./temp')
-            for temp_file in temp_path.iterdir():
-                if temp_file.is_file():
-                    temp_file.unlink()
+        # STEP 2: PROCESS PDF FILE
+        file = fname[0].split('/')
+        self.anno_sheetTxt.setText(file[-1])  # <- adds name of current work sheet to program
 
-            # STEP 2: PROCESS PDF FILE
-            file = fname[0].split('/')
-            self.anno_sheetTxt.setText(file[-1])  # <- adds name of current work sheet to program
+        pdf_file = fitz.open(fname[0])
 
-            pdf_file = fitz.open(fname[0])
+        for i in range(len(pdf_file)):
+            page = pdf_file.load_page(i)  # load the page
+            image = page.get_images(full=True)  # get images on the page
 
-            for i in range(len(pdf_file)):
-                page = pdf_file.load_page(i)  # load the page
-                image = page.get_images(full=True)  # get images on the page
+            xref = image[0][0]
 
-                xref = image[0][0]
+            base_image = pdf_file.extract_image(xref)
+            image_bytes = base_image['image']
+            image_ext = base_image['ext']
 
-                base_image = pdf_file.extract_image(xref)
-                image_bytes = base_image['image']
-                image_ext = base_image['ext']
+            image_name = file[-1] + '_page_' + str(i + 1) + '.' + image_ext
 
-                image_name = file[-1] + '_page_' + str(i + 1) + '.' + image_ext
+            self.page_index[image_name] = i + 1
 
-                self.page_index[image_name] = i + 1
+            with open('temp/' + image_name, 'wb') as image_file:
+                image_file.write(image_bytes)
 
-                with open('temp/' + image_name, 'wb') as image_file:
-                    image_file.write(image_bytes)
+        current_page = list(self.page_index.keys())[0]
+        self.scene.addPixmap(QPixmap('temp/' + current_page))
+        self.scene.items()[0].setZValue(1)
 
-            current_page = list(self.page_index.keys())[0]
-            self.scene.addPixmap(QPixmap('temp/' + current_page))
-            self.scene.items()[0].setZValue(1)
+        self.anno_pageTxt.setText(str(self.page_index[current_page]))
 
-            self.anno_pageTxt.setText(str(self.page_index[current_page]))
+        # this adds one GraphicsView tab for each page beyond the first
+        self.page_items[1] = []
+        for i in range(len(self.page_index) - 1):
+            new_view = GraphicsView(self.scene)
+            new_view.mouse_pressed_signal.connect(self.mouseTracker)
+            self.view_tabs.addTab(new_view, 'Page ' + str(i + 2))
 
-            # this adds one GraphicsView tab for each page beyond the first
-            self.page_items[1] = []
-            for i in range(len(self.page_index) - 1):
-                new_view = GraphicsView(self.scene)
-                new_view.mouse_pressed_signal.connect(self.mouse_tracker)
-                self.view_tabs.addTab(new_view, 'Page ' + str(i + 2))
-
-                self.page_items[i + 2] = []
+            self.page_items[i + 2] = []
 
     # load in CSV file to continue annotating
-    def csv_import(self):
+    def csvImport(self):
         self.scene.clearSelection()
         self.view_tabs.setCurrentIndex(0)
 
@@ -444,19 +438,24 @@ class MainWindow(QMainWindow):
             file_csv = fname[0].split('/')[-1]  # name of csv file
             file_doc = df['Source'][0]  # name of image file
             file_path = fname[0].replace(file_csv, '')
+        else: return
 
-            # STEP 2: CLEAN UP EVERYTHING CURRENTLY LOADED
+        # STEP 2: CLEAN UP EVERYTHING CURRENTLY LOADED
+        # this branch is for importing a single image
+        if file_doc.split('.')[-1] != 'pdf':
+            self.findFile('Single Image')
+            self.imgImport()
+
+        # this branch is for importing multiple images from a pdf file; the code will skip to STEP 4 otherwise
+        else:
             self.scene.clear()
-
-            self.clear_dictionaries()
-            self.clear_annoTabs()
+            self.clearDictionaries()
+            self.clearAnnotationTab()
 
             # remove all view tabs but the first one:
             for i in reversed(range(list(self.page_items.keys())[-1])):
-                if i == 0:
-                    break
-                else:
-                    self.view_tabs.removeTab(i)
+                if i == 0: break
+                else: self.view_tabs.removeTab(i)
 
             self.page_index = dict()
             self.page_items = dict()
@@ -464,19 +463,14 @@ class MainWindow(QMainWindow):
             # clear temp folder to avoid conflicts
             temp_path = Path('./temp')
             for temp_file in temp_path.iterdir():
-                if temp_file.is_file():
-                    temp_file.unlink()
+                if temp_file.is_file(): temp_file.unlink()
 
             # STEP 3: IMPORT CSV AND IMPORT PICTURE(S) INTO SCENE (AND ADD ONE TAB PER PICTURE)
             self.anno_sheetTxt.setText(file_doc)
 
-            try:
-                fitz.open(file_path + '/' + file_doc)
-            except:
-                alt = QFileDialog.getOpenFileName(self, 'Open Corresponding PDF File', file_path, '(*.pdf)', )
-                pdf_file = fitz.open(alt[0])
-            else:
-                pdf_file = fitz.open(file_path + '/' + file_doc)
+            try: fitz.open(file_path + '/' + file_doc)
+            except: pdf_file = self.findFile(file_path) # <- opens new window to select PDF if not in folder of CSV file
+            else: pdf_file = fitz.open(file_path + '/' + file_doc)
 
             for i in range(len(pdf_file)):
                 page = pdf_file.load_page(i)  # load the page
@@ -505,84 +499,154 @@ class MainWindow(QMainWindow):
             self.page_items[1] = []
             for i in range(len(self.page_index) - 1):
                 new_view = GraphicsView(self.scene)
-                new_view.mouse_pressed_signal.connect(self.mouse_tracker)
+                new_view.mouse_pressed_signal.connect(self.mouseTracker)
                 self.view_tabs.addTab(new_view, 'Page ' + str(i + 2))
 
                 self.page_items[i + 2] = []
 
-            # STEP 4: LOAD IN ANNOTATION WIDGET
-            for col in df.columns[1:-5]:
-                new_dim = col
-                self.annotation_layers['Dims'].append(new_dim)
+        # STEP 4: LOAD IN ANNOTATION WIDGET (if a single image was selected, the code immediately continues here)
+        for col in df.columns[6:]:
+            new_dim = col
+            self.annotation_layers['Dims'].append(new_dim)
 
-                for key in self.item_dict.keys():
-                    self.item_dict[key].append(new_dim)
+            for key in self.item_dict.keys():
+                self.item_dict[key].append(new_dim)
 
-                self.anno_bot_widgetLabs.addWidget(QPushButton(new_dim))
-                self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
-                self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().pressed.connect(self.layer_edit)
+            self.anno_bot_widgetLabs.addWidget(QPushButton(new_dim))
+            self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
+            self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().pressed.connect(self.editLayer)
 
-                self.anno_bot_widgetTxts.addWidget(QLineEdit(new_dim))
-                self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
-                self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setPlaceholderText('NA')
-                self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().textChanged.connect(self.text_edit)
+            self.anno_bot_widgetTxts.addWidget(QLineEdit(new_dim))
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setPlaceholderText('NA')
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().textChanged.connect(self.updateAnnotations)
 
-                self.dim_counter += 1
+            self.dim_counter += 1
 
-            # # STEP 5: LOAD IN RECTANGLES AND ANNOTATIONS
-            pen = QPen(Qt.GlobalColor.red)
-            pen.setWidth(1)
+        # # STEP 5: LOAD IN RECTANGLES AND ANNOTATIONS
+        pen = QPen(Qt.GlobalColor.red)
+        pen.setWidth(1)
 
-            for i in df['Index']:
+        for i in df['Index']:
 
-                # 5.1: coordinates + rectangles
-                current_coords = df.loc[df['Index'].isin([i]), 'Coords'].tolist()[0][1:-1].split(', ')
-                x, y = float(current_coords[0]), float(current_coords[1])
-                width, height = float(current_coords[2]), float(current_coords[3])
+            # 5.1: coordinates + rectangles
+            current_coords = df.loc[df['Index'].isin([i]), 'Coordinates'].tolist()[0][1:-1].split(', ')
+            x, y = float(current_coords[0]), float(current_coords[1])
+            width, height = float(current_coords[2]), float(current_coords[3])
 
-                rect = QGraphicsRectItem(0, 0, width, height)
-                rect.setPos(x, y)
-                rect.setPen(pen)
+            rect = QGraphicsRectItem(0, 0, width, height)
+            rect.setPos(x, y)
+            rect.setPen(pen)
 
-                self.scene.addItem(rect)
+            self.scene.addItem(rect)
 
-                self.item_dict[rect] = []
-                self.item_coords[rect] = [round(rect.x(), 2),
-                                          round(rect.y(), 2),
-                                          rect.rect().width(),
-                                          rect.rect().height()]
+            self.item_dict[rect] = []
+            self.item_coords[rect] = [round(rect.x(), 2),
+                                      round(rect.y(), 2),
+                                      rect.rect().width(),
+                                      rect.rect().height()]
 
-                # 5.2: item index and page
-                self.item_index[rect] = i
+            # 5.2: item index and page
+            self.item_index[rect] = i
 
-                current_page = df.loc[df['Index'].isin([i]), 'Page'].tolist()[0]
-                self.page_items[current_page].append(rect)
+            current_page = df.loc[df['Index'].isin([i]), 'Page'].tolist()[0]
+            self.page_items[current_page].append(rect)
 
-                # 5.3: anchors
-                current_anchor = df.loc[df['Index'].isin([i]), 'Anchor'].tolist()[0]
-                if pd.isna(current_anchor):
-                    self.item_anchors[rect] = None
-                else:
-                    x, y = current_anchor[1:-1].split(', ')
-                    self.item_anchors[rect] = [float(x), float(y)]
+            # 5.3: item color
+            current_color = df.loc[df['Index'].isin([i]), 'Color'].tolist()[0]
+            self.item_colors[rect] = current_color
+            if current_color == 'red': rect.setPen(QPen(Qt.GlobalColor.red))
+            elif current_color == 'green': rect.setPen(QPen(Qt.GlobalColor.green))
+            elif current_color == 'blue': rect.setPen(QPen(Qt.GlobalColor.blue))
 
-                # 5.4: annotations
-                vals = df.loc[df['Index'].isin([i]), df.columns[1:-5]].values.flatten().tolist()
+            # 5.4: anchors
+            current_anchor = df.loc[df['Index'].isin([i]), 'Anchor'].tolist()[0]
+            if pd.isna(current_anchor): self.item_anchors[rect] = None
+            else:
+                x, y = current_anchor[1:-1].split(', ')
+                self.item_anchors[rect] = [float(x), float(y)]
 
-                for v in range(len(vals)):
-                    if pd.isna(vals[v]): vals[v] = ''
-                self.item_dict[rect] = vals
+            # 5.5: annotations
+            vals = df.loc[df['Index'].isin([i]), df.columns[6:]].values.flatten().tolist()
 
-                self.item_counter = i
+            for v in range(len(vals)):
+                if pd.isna(vals[v]): vals[v] = ''
+            self.item_dict[rect] = vals
 
-            self.item_counter += 1
-            self.change_page()
+            self.item_counter = i
+
+        self.item_counter += 1
+
+        if file_doc.split('.')[-1] == 'pdf': self.changePage()
+        else:
+            self.scene.items()[0].setZValue(1)
+            for item in self.page_items[1]:
+                item.setZValue(2)
+                item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+                item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+            self.toggleItems()
+
+    # opens a dialog that tells the user to select an image or PDF corresponding to the to be imported CSV file
+    def findFile(self, path):
+        if path == 'Single Image':
+            alert = QDialog(self)
+            alert.setWindowTitle('Select Image File')
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel('Please select the corresponding image file.'))
+            confirm_button = QPushButton('Confirm')
+            confirm_button.pressed.connect(alert.accept)
+            layout.addWidget(confirm_button)
+            alert.setLayout(layout)
+            alert.exec()
+        else:
+            alert = QDialog(self)
+            alert.setWindowTitle('Select PDF File')
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel('PDF not in folder of CSV.\nPlease select corresponding PDF file.'))
+            confirm_button = QPushButton('Confirm')
+            confirm_button.pressed.connect(alert.accept)
+            layout.addWidget(confirm_button)
+            alert.setLayout(layout)
+            alert.exec()
+
+            alt = QFileDialog.getOpenFileName(self, 'Select Corresponding PDF File', path, '(*.pdf)', )
+            return fitz.open(alt[0])
+
+    # this function imports custom annotation layers (i.e. columns) from a CSV file
+    def schemeImport(self):
+        # STEP 1: GET CSV FILE
+        fname = QFileDialog.getOpenFileName(
+            self,
+            'Open CSV File', './', '(*.csv)', )
+
+        if len(fname[0]) > 0:
+            # load in data frame
+            df = pd.read_csv(fname[0])
+        else: return
+
+        for col in df.columns[6:]:
+            new_dim = col
+            self.annotation_layers['Dims'].append(new_dim)
+
+            for key in self.item_dict.keys():
+                self.item_dict[key].append("")
+
+            self.anno_bot_widgetLabs.addWidget(QPushButton(new_dim))
+            self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
+            self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().pressed.connect(self.editLayer)
+
+            self.anno_bot_widgetTxts.addWidget(QLineEdit(new_dim))
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setPlaceholderText('NA')
+            self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().textChanged.connect(self.updateAnnotations)
+
+            self.dim_counter += 1
 
     '''
     ((3.2)) Functions for actions within the scene
     '''
     # loads in a new page if the corresponding tab is selected
-    def change_page(self):
+    def changePage(self):
         self.scene.clearSelection()
 
         current_index = self.view_tabs.currentIndex()
@@ -607,21 +671,13 @@ class MainWindow(QMainWindow):
             item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
             item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
 
-        self.toggle_items()
+        self.toggleItems()
 
     # this function triggers whenever an item in the scene is selected/deselected and does several things:
     # 1) loads and displays annotations of selected item
     # 2) makes selected item transparent
     # 3) shows anchor of selected item
-    # 4) loads helper lines
-    def change_key(self):
-
-        # this removes the helper line whenever a new item is selected / nothing is selected
-        # if self.helper_lineStatus == True:
-        #     self.scene.removeItem(self.helper_lineH)
-        #     self.scene.removeItem(self.helper_lineV)
-        #     self.helper_lineStatus = False
-
+    def changeKey(self):
         if self.anchorStatus == True:
             self.scene.removeItem(self.anchor)
             self.anchorStatus = False
@@ -630,12 +686,21 @@ class MainWindow(QMainWindow):
         if len(self.scene.selectedItems()) == 1:
 
             if self.current_key != self.scene.selectedItems()[0] and self.current_key != 'Dims':
-                self.current_key.setPen(self.rect_pen)
+                if not self.recolor_action.isChecked():
+                    if self.current_color == 'red': pen = QPen(Qt.GlobalColor.red)
+                    elif self.current_color == 'green': pen = QPen(Qt.GlobalColor.green)
+                    elif self.current_color == 'blue': pen = QPen(Qt.GlobalColor.blue)
+                    self.current_key.setPen(pen)
+                else:
+                    self.current_key.setPen(self.rect_pen)
+                    self.item_colors[self.current_key] = self.rect_col.currentText()
 
             self.current_key = self.scene.selectedItems()[0]
+            self.current_color = self.item_colors[self.current_key]
 
             pen = QPen(Qt.GlobalColor.transparent)
             self.current_key.setPen(pen)
+            self.current_key.setPos(self.current_key.pos())
 
             widgets = self.anno_bot_widgetTxts.count()
             for i in range(widgets):
@@ -645,37 +710,11 @@ class MainWindow(QMainWindow):
                 self.anno_bot_widgetTxts.addWidget(QLineEdit(str(self.item_dict[self.current_key][i])))
                 self.anno_bot_widgetTxts.itemAt(i).widget().setPlaceholderText('NA')
                 self.anno_bot_widgetTxts.itemAt(i).widget().setFixedHeight(30)
-                self.anno_bot_widgetTxts.itemAt(i).widget().textChanged.connect(self.text_edit)
+                self.anno_bot_widgetTxts.itemAt(i).widget().textChanged.connect(self.updateAnnotations)
 
             self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
             self.anno_indexTxt.setText(str(self.item_index[self.current_key]))
             self.anno_anchorTxt.setText(str(self.item_anchors[self.current_key]))
-
-            # code block below adds helper lines to the scene that go through the center of the selected rectangle
-            # x, y = self.item_coords[self.current_key][0], self.item_coords[self.current_key][1]
-            # width, height = self.item_coords[self.current_key][2], self.item_coords[self.current_key][3]
-            # # horizontal line
-            # self.helper_lineH = QGraphicsLineItem(x - width / 4,  # starting x position
-            #                                       y + height / 2,  # starting y position
-            #                                       x + width + width / 4,  # ending x position
-            #                                       y + height / 2)  # ending y position
-            #
-            # # vertical line
-            # self.helper_lineV = QGraphicsLineItem(x + width / 2,  # starting x position
-            #                                       y - height / 4,  # starting y position
-            #                                       x + width / 2,  # ending x position
-            #                                       y + height + height / 4)  # ending y position
-            #
-            # pen = QPen(Qt.GlobalColor.red)
-            # pen.setWidth(1)
-            # pen.setStyle(Qt.PenStyle.DashLine)
-            # self.helper_lineH.setPen(pen)
-            # self.helper_lineV.setPen(pen)
-            # self.helper_lineH.setZValue(2)
-            # self.helper_lineV.setZValue(2)
-            #
-            # self.scene.addItem(self.helper_lineH)
-            # self.scene.addItem(self.helper_lineV)
 
             if self.item_anchors[self.current_key] is not None:
                 self.anchor = QGraphicsLineItem(self.item_anchors[self.current_key][0] - 5,
@@ -693,13 +732,17 @@ class MainWindow(QMainWindow):
 
                 self.anchorStatus = True
 
-            # self.helper_lineStatus = True
-
         ## this triggers whenever a rectangle is de-selected (i.e. nothing is selected):
         else:
-
             if self.current_key != 'Dims':
-                self.current_key.setPen(self.rect_pen)
+                if not self.recolor_action.isChecked():
+                    if self.current_color == 'red': pen = QPen(Qt.GlobalColor.red)
+                    elif self.current_color == 'green': pen = QPen(Qt.GlobalColor.green)
+                    elif self.current_color == 'blue': pen = QPen(Qt.GlobalColor.blue)
+                    self.current_key.setPen(pen)
+                else:
+                    self.current_key.setPen(self.rect_pen)
+                    self.item_colors[self.current_key] = self.rect_col.currentText()
 
             self.current_key = 'Dims'
 
@@ -715,38 +758,17 @@ class MainWindow(QMainWindow):
             self.anno_coordTxt.setText('No item selected')
             self.anno_anchorTxt.setText('No item selected')
 
-    # function to update position of helper lines whenever a selected rectangle is moved
-    def adjust_helperLines(self):
-        x, y = self.item_coords[self.current_key][0], self.item_coords[self.current_key][1]
-        width, height = self.item_coords[self.current_key][2], self.item_coords[self.current_key][3]
-
-        self.helper_lineH.setLine(x - width / 4,  # starting x position
-                                  y + height / 2,  # starting y position
-                                  x + width + width / 4,  # ending x position
-                                  y + height / 2)  # ending y position
-
-        self.helper_lineV.setLine(x + width / 2,  # starting x position
-                                  y - height / 4,  # starting y position
-                                  x + width / 2,  # ending x position
-                                  y + height + height / 4)  # ending y position
-
-        self.helper_lineH.setZValue(2)
-        self.helper_lineV.setZValue(2)
-
     '''
     ((3.3)) Functions that handle items in the scene
     '''
     # function to set color of rectangles
-    def set_pen(self, pen):
-        if pen == 0:
-            self.rect_pen = QPen(Qt.GlobalColor.red)
-        elif pen == 1:
-            self.rect_pen = QPen(Qt.GlobalColor.green)
-        elif pen == 2:
-            self.rect_pen = QPen(Qt.GlobalColor.blue)
+    def setColor(self, pen):
+        if pen == 0: self.rect_pen = QPen(Qt.GlobalColor.red)
+        elif pen == 1: self.rect_pen = QPen(Qt.GlobalColor.green)
+        elif pen == 2: self.rect_pen = QPen(Qt.GlobalColor.blue)
 
     # add item to scene and create corresponding entry in dictionary
-    def add_item(self):
+    def addItem(self):
         rect = QGraphicsRectItem(0, 0, int(self.rect_x.text()), int(self.rect_y.text()))
 
         # this makes it so that the center of the new rectangle aligns with where the mouse click happened
@@ -770,6 +792,7 @@ class MainWindow(QMainWindow):
 
             # add coordinates/size of new rectangle to corresponding dictionary
             self.item_coords[rect] = [round(rect.x(), 2), round(rect.y(), 2), rect.rect().width(), rect.rect().height()]
+            self.item_colors[rect] = self.rect_col.currentText()
             self.item_anchors[rect] = None
             self.item_index[rect] = self.item_counter
             self.item_counter += 1
@@ -784,7 +807,7 @@ class MainWindow(QMainWindow):
             rect.setSelected(True)
 
     # change size of rectangle
-    def adjust_item(self):
+    def adjustItem(self):
         item = self.scene.selectedItems()
         if len(item) > 0:
             item[0].setRect(0, 0, int(self.rect_x.text()), int(self.rect_y.text()))
@@ -795,10 +818,9 @@ class MainWindow(QMainWindow):
                                          item[0].rect().width(),
                                          item[0].rect().height()]
             self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-            # self.adjust_helperLines()  # <- adjust helper lines accordingly
 
     # this function is for resizing items with the mouse
-    def resize_item(self, x, y):
+    def resizeItem(self, x, y):
         item = self.scene.selectedItems()
         if len(item) == 1:
             width_change = item[0].x() - x
@@ -811,16 +833,15 @@ class MainWindow(QMainWindow):
             if int(new_width) > 0 and int(new_height) > 0:
                 item[0].setRect(0, 0, int(new_width), int(new_height))
 
-        # update coordinates dictionary:
-        self.item_coords[item[0]] = [round(item[0].x(), 2),
-                                     round(item[0].y(), 2),
-                                     item[0].rect().width(),
-                                     item[0].rect().height()]
-        self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-        # self.adjust_helperLines()  # <- adjust helper lines accordingly
+            # update coordinates dictionary:
+            self.item_coords[item[0]] = [round(item[0].x(), 2),
+                                         round(item[0].y(), 2),
+                                         item[0].rect().width(),
+                                         item[0].rect().height()]
+            self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
 
     # delete currently selected item (and update dictionaries accordingly)
-    def delete_item(self):
+    def deleteItem(self):
         if self.current_key != 'Dims':
 
             self.item_dict.pop(self.current_key)
@@ -843,8 +864,8 @@ class MainWindow(QMainWindow):
             self.scene.clearSelection()
 
     # changes movable status of items in the scene
-    def toggle_items(self):
-        if self.toggle_action.isChecked() == True:
+    def toggleItems(self):
+        if self.toggle_action.isChecked():
             for key in self.item_index.keys():
                 key.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         else:
@@ -852,7 +873,7 @@ class MainWindow(QMainWindow):
                 key.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
 
     # this functions marks the line on which the annotated letter is written
-    def set_anchor(self):
+    def setAnchor(self):
         item = self.scene.selectedItems()
 
         if self.anchorStatus == True:
@@ -881,7 +902,7 @@ class MainWindow(QMainWindow):
     ((3.4)) Annotation functions
     '''
     # this opens a dialog box to modify the index of the currently selected rectangle
-    def update_index(self):
+    def updateIndex(self):
         if len(self.scene.selectedItems()) == 1:
             index_dialog = QDialog(self)
             index_dialog.setWindowTitle('Set index of current item')
@@ -900,7 +921,7 @@ class MainWindow(QMainWindow):
             self.new_index.setMaximum(max(values))
             self.new_index.setValue(self.item_index[self.current_key])
             confirm_button = QPushButton('Confirm')
-            confirm_button.pressed.connect(self.index_loop)
+            confirm_button.pressed.connect(self.indexLoop)
             confirm_button.pressed.connect(index_dialog.accept)
 
             layout.addWidget(self.new_index)
@@ -912,7 +933,7 @@ class MainWindow(QMainWindow):
             print('No Item selected')
 
     # this adjusts all indices depending on the new index of the currently selected item
-    def index_loop(self):
+    def indexLoop(self):
         current_index = self.item_index[self.current_key]
 
         if current_index == self.new_index.value():
@@ -935,7 +956,7 @@ class MainWindow(QMainWindow):
         self.anno_indexTxt.setText(str(self.item_index[self.current_key]))
 
     # add annotation layers
-    def define_annotations(self):
+    def addAnnotationLayer(self):
         self.scene.clearSelection()
         new_dim = self.anno_new_layer_title.text()
 
@@ -950,17 +971,17 @@ class MainWindow(QMainWindow):
         # create widgets to add to annotation layers
         self.anno_bot_widgetLabs.addWidget(QPushButton(new_dim))
         self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
-        self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().pressed.connect(self.layer_edit)
+        self.anno_bot_widgetLabs.itemAt(self.dim_counter - 1).widget().pressed.connect(self.editLayer)
 
         # this part triggers changes to item specific annotations
         self.anno_bot_widgetTxts.addWidget(QLineEdit(new_dim))
         self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setFixedHeight(30)
         self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().setPlaceholderText('NA')
-        self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().textChanged.connect(self.text_edit)
+        self.anno_bot_widgetTxts.itemAt(self.dim_counter - 1).widget().textChanged.connect(self.updateAnnotations)
         self.dim_counter += 1
 
     # opens dialog for changing the label of an annotation layer
-    def layer_edit(self):
+    def editLayer(self):
         self.sender_btn = self.sender().text()
 
         dialog = QDialog(self)
@@ -975,7 +996,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.new_label)
 
         confirm_button = QPushButton('Confirm')
-        confirm_button.pressed.connect(self.set_layer)
+        confirm_button.pressed.connect(self.renameLayer)
         confirm_button.pressed.connect(dialog.accept)
 
         layout.addWidget(confirm_button)
@@ -984,7 +1005,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     # this function eventually changes the label of the annotation layer
-    def set_layer(self):
+    def renameLayer(self):
         widgets = self.anno_bot_widgetLabs.count()
         for i in range(widgets):
             if self.anno_bot_widgetLabs.itemAt(i).widget().text() == self.sender_btn:
@@ -997,7 +1018,7 @@ class MainWindow(QMainWindow):
             self.annotation_layers['Dims'][i] = self.anno_bot_widgetLabs.itemAt(i).widget().text()
 
     # this function keeps the dictionary with the item specific annotations updated
-    def text_edit(self):
+    def updateAnnotations(self):
         ## If a rectangle is in selection, edit annotations for that rectangle:
         if len(self.scene.selectedItems()) == 1:
             self.current_key = self.scene.selectedItems()[0]
@@ -1012,7 +1033,7 @@ class MainWindow(QMainWindow):
 
     # this function allows the currently selected rectangle to inherit annotations of the previous item (by index)
     # press control + i when a rectangle is selected AND an annotation layer text edit line has focus to trigger this
-    def inherit_annotation(self):
+    def inheritAnnotation(self):
         if self.current_key != 'Dims' and self.item_index[self.current_key] != 1:
 
             prev_index = self.item_index[self.current_key] - 1
@@ -1024,65 +1045,11 @@ class MainWindow(QMainWindow):
                     self.anno_bot_widgetTxts.itemAt(i).widget().setText(str(prev_annotation))
                     break
 
-    # define letter and annotation layer to be searched
-    def letter_search_function(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle('Define letter search function')
-
-        layout = QVBoxLayout()
-
-        layout.addWidget(QLabel('Set letter to be searched'))
-        new_letter = QLineEdit('')
-        new_letter.setText(self.letter.text())
-        new_letter.textChanged.connect(self.letter.setText)
-        layout.addWidget(new_letter)
-
-        layout.addWidget(QLabel('Set annotation layer to be searched'))
-        new_layer = QComboBox()
-        new_layer.addItems(self.annotation_layers['Dims'])
-        new_layer.currentTextChanged.connect(self.layer.setText)
-        layout.addWidget(new_layer)
-
-        confirm_button = QPushButton('Confirm')
-        confirm_button.pressed.connect(dialog.accept)
-        layout.addWidget(confirm_button)
-
-        dialog.setLayout(layout)
-        dialog.exec()
-
-    # this functions finds the position of a self-defined letter and pastes its position into the text edit line that is
-    # currently in focus; the key-binding for this function is control + f
-    # ISSUES: (1) does not work properly if a word is repeated; (2) does not work beyond second instance of letter
-    def find_letter(self):
-
-        # first, check whether a letter and layer to be searched was defined
-        if self.layer.text() == '' or self.letter.text() == '':
-            self.letter_search_function() # <- trigger this function if not
-
-        else:
-            index = self.annotation_layers['Dims'].index(self.layer.text())
-
-            if self.current_key != 'Dims':
-
-                for i in range(len(self.item_dict[self.current_key])):
-                    if self.anno_bot_widgetTxts.itemAt(i).widget().hasFocus():
-                        position = self.item_dict[self.current_key][index].find(self.letter.text()) + 1
-
-                        previous_index = self.item_index[self.current_key] - 2
-                        previous_key = list(self.item_index.keys())[previous_index]
-                        if self.item_dict[self.current_key][index] == self.item_dict[previous_key][index]:
-
-                            string = self.item_dict[self.current_key][index][position:]
-                            next_letter = string.find(self.letter.text()) + 1
-                            position = position + next_letter
-
-                        self.anno_bot_widgetTxts.itemAt(i).widget().setText(str(position))
-                        break
-
     # call this function whenever dictionaries must be cleared
-    def clear_dictionaries(self):
+    def clearDictionaries(self):
         self.item_dict = dict()
         self.item_coords = dict()
+        self.item_colors = dict()
         self.item_anchors = dict()
         self.item_index = dict()
         self.item_counter = 1
@@ -1094,7 +1061,7 @@ class MainWindow(QMainWindow):
         self.current_key = 'Dims'
 
     # call this function whenever the annotations tabs need to be cleared
-    def clear_annoTabs(self):
+    def clearAnnotationTab(self):
         widgets = self.anno_bot_widgetLabs.count()
         for i in range(widgets):
             self.anno_bot_widgetLabs.removeWidget(self.anno_bot_widgetLabs.itemAt(0).widget())
@@ -1104,7 +1071,7 @@ class MainWindow(QMainWindow):
     ((3.5)) Export functions (annotations to CSV and rendering screenshots)
     '''
     # function to export all annotations within the scene as a csv file
-    def export_annotations(self):
+    def exportAnnotations(self):
         dialog = QDialog(self)
         dialog.setWindowTitle('Export Annotations as CSV file')
 
@@ -1127,9 +1094,12 @@ class MainWindow(QMainWindow):
                                     orient='index',
                                     columns=self.annotation_layers['Dims'])
 
+        custom_columns = df.columns.tolist()
+
         # this adds the coordinates and size of the rectangles to the data frame
         df['Index'] = df.index.map(self.item_index)
-        df['Coords'] = df.index.map(self.item_coords)
+        df['Coordinates'] = df.index.map(self.item_coords)
+        df['Color'] = df.index.map(self.item_colors)
         df['Anchor'] = df.index.map(self.item_anchors)
         df['Source'] = self.anno_sheetTxt.text()
 
@@ -1145,13 +1115,18 @@ class MainWindow(QMainWindow):
 
         df = df.sort_values(by=['Index'])
 
+        # reorder columns:
+        order = ['Index','Page','Coordinates','Color','Anchor','Source'] + custom_columns
+        final_df = df[order]
+
         if not os.path.exists('Annotated/' + file_name):
             os.makedirs('Annotated/' + file_name)
 
-        df.to_csv('Annotated/' + file_name + '/' + file_name + '_' + sign.text() + '.csv')
+        final_df.to_csv('Annotated/' + file_name + '/' + file_name + '_' + sign.text() + '.csv',
+                        index=False)
 
     # screenshotting function dialog
-    def make_screens(self):
+    def takeScreenshots(self):
         dialog = QDialog(self)
         dialog.setWindowTitle('Make Screenshots')
 
@@ -1166,10 +1141,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(cancel_button, 1, 2)
 
         current_button.pressed.connect(dialog.accept)
-        current_button.pressed.connect(self.screen_page)
+        current_button.pressed.connect(self.screenshotPage)
 
         document_button.pressed.connect(dialog.accept)
-        document_button.pressed.connect(self.screen_doc)
+        document_button.pressed.connect(self.screenshotDocument)
 
         cancel_button.pressed.connect(dialog.accept)
 
@@ -1177,7 +1152,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     # make screenshots of items in current page only
-    def screen_page(self):
+    def screenshotPage(self):
         self.scene.clearSelection()
 
         file_name = self.anno_sheetTxt.text()[0:-4]
@@ -1219,7 +1194,7 @@ class MainWindow(QMainWindow):
             key.setPen(pen)
 
     # make screenshots of all items (page by page)
-    def screen_doc(self):
+    def screenshotDocument(self):
         self.scene.clearSelection()
 
         file_name = self.anno_sheetTxt.text()[0:-4]
@@ -1286,7 +1261,7 @@ class MainWindow(QMainWindow):
         self.context_menu.exec(event.globalPos())
 
     # this function tracks the cursor position
-    def mouse_tracker(self, pos):
+    def mouseTracker(self, pos):
         current_index = self.view_tabs.currentIndex()
         self.last_pos = self.view_tabs.widget(current_index).mapToGlobal(pos)
         self.scene_pos = self.view_tabs.widget(current_index).mapToScene(pos)
@@ -1300,19 +1275,12 @@ class MainWindow(QMainWindow):
                                          item[0].rect().height()]
             self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
 
-            # this makes it so that the helper lines are being dragged together with the selected rectangle:
-            # if self.view_tabs.widget(current_index).is_dragging == True:
-            #     self.adjust_helperLines()
-            # else:
-            #     self.adjust_helperLines()
-
     # Various key bound actions
     def keyPressEvent(self, event):
-
         # This KeyPressEvent enables setting new annotation layers directly from the input line by pressing Return
         if self.anno_new_layer_title.hasFocus():
             if event.key() == Qt.Key.Key_Return:
-                self.define_annotations()
+                self.addAnnotationLayer()
                 self.anno_new_layer_title.setText('')
 
         # Below are KeyPressEvents that modify a selected rectangle
@@ -1329,7 +1297,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setRect(0, 0, int(item[0].rect().width()) + 1, int(item[0].rect().height()))
@@ -1339,7 +1306,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) - 1)
@@ -1349,7 +1315,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) + 1)
@@ -1359,7 +1324,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Return:
                     # switch to next item; if at last index, switch to item with index 1
@@ -1381,10 +1345,7 @@ class MainWindow(QMainWindow):
 
                 elif event.key() == Qt.Key.Key_I:
                     # inherit current annotation of previous item (by index)
-                    self.inherit_annotation()
-
-                elif event.key() == Qt.Key.Key_F:
-                    self.find_letter()
+                    self.inheritAnnotation()
 
             # Shift modifier allows for 5 pixel size adjustments to selected rectangle:
             elif event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
@@ -1396,7 +1357,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setRect(0, 0, int(item[0].rect().width()) + 5, int(item[0].rect().height()))
@@ -1406,7 +1366,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) - 5)
@@ -1416,7 +1375,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setRect(0, 0, int(item[0].rect().width()), int(item[0].rect().height()) + 5)
@@ -1426,7 +1384,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
             # Without any modifier, the position of the rectangle can be adjusted in 1 pixel increments
             else:
@@ -1438,7 +1395,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Right or event.key() == Qt.Key.Key_D:
                     item[0].setPos(item[0].x() + 1, item[0].y())
@@ -1448,7 +1404,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_W:
                     item[0].setPos(item[0].x(), item[0].y() - 1)
@@ -1458,7 +1413,6 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_S:
                     item[0].setPos(item[0].x(), item[0].y() + 1)
@@ -1468,22 +1422,21 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
-                    # self.adjust_helperLines()  # <- helper lines follow movement
 
                 elif event.key() == Qt.Key.Key_Space:
-                    # press Space to re-center the helper lines
-                    self.set_anchor()
+                    # press Space to set anchor
+                    self.setAnchor()
 
         # pressing/releasing Alt (without any modifier) has to purposes:
         # (1) it toggles all items movable on pressing alt / immovable on releasing alt
         # (2) if an item is selected, it places another rectangle on top, which can be dragged around to adjust the size
         # of the selected item; this adjustment happens on release of Alt
         if event.key() == Qt.Key.Key_Alt:
-            self.toggle_action.setChecked(True)
-            self.toggle_items()
-
             item = self.scene.selectedItems()
             if len(item) == 1:
+                for key in self.item_index.keys():
+                    key.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+
                 self.sizer = QGraphicsRectItem(0, 0, item[0].rect().width(), item[0].rect().height())
 
                 self.sizer.setPos(item[0].x(), item[0].y())
@@ -1495,9 +1448,12 @@ class MainWindow(QMainWindow):
                 self.scene.addItem(self.sizer)
 
     def keyReleaseEvent(self, event):
-        if event.key() == Qt.Key.Key_Alt:
-            self.toggle_action.setChecked(False)
-            self.toggle_items()
+        if event.key() == Qt.Key.Key_Alt and not self.view.is_pressed:
+
+            for key in self.item_index.keys():
+                key.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+
+            self.toggleItems()
 
             # this is the keyRelease-part to the item resizing function;
             # only on release is the actual resizing triggered
@@ -1506,9 +1462,28 @@ class MainWindow(QMainWindow):
                 x = self.sizer.x()
                 y = self.sizer.y()
 
-                self.resize_item(x, y)
                 self.scene.removeItem(self.sizer)
-            else:
+                self.resizeItem(x, y)
+
+                try: self.scene.removeItem(self.sizer)
+                except: return
+
+        elif event.key() == Qt.Key.Key_Alt:
+            # the part below is there in order to prevent a glitch that only happens when Alt is released before the
+            # mouse; in this case, now all items are set immovable until toggled movable again
+            self.toggle_action.setChecked(True)
+            self.toggleItems()
+
+            # this is the keyRelease-part to the item resizing function;
+            # only on release is the actual resizing triggered
+            item = self.scene.selectedItems()
+            if len(item) == 1:
+                x = self.sizer.x()
+                y = self.sizer.y()
+
+                self.scene.removeItem(self.sizer)
+                self.resizeItem(x, y)
+
                 try: self.scene.removeItem(self.sizer)
                 except: return
 
