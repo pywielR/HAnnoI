@@ -28,12 +28,23 @@ class GraphicsView(QGraphicsView):
 
     ## Below are functions to navigate the viewer (zoom in and out of scene, drag around)
     def wheelEvent(self, event):
-        angle = event.angleDelta().y()
-        if angle > 0:
-            self.scale(1.2, 1.2)  # Zoom in sensitivity
-        else:
-            self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
-        event.accept()
+            angle = event.angleDelta().y()
+            if angle > 0:
+                self.scale(1.2, 1.2)  # Zoom in sensitivity
+            else:
+                self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
+            event.accept()
+
+    ## Alternative to the wheelEvent from above, where zooming in and out only functions with the ctrl-modifier
+    # def wheelEvent(self, event):
+    #     if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+    #         angle = event.angleDelta().y()
+    #         if angle > 0:
+    #             self.scale(1.2, 1.2)  # Zoom in sensitivity
+    #         else:
+    #             self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
+    #         event.accept()
+    #     else: super().wheelEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1347,6 +1358,10 @@ class MainWindow(QMainWindow):
                     # inherit current annotation of previous item (by index)
                     self.inheritAnnotation()
 
+                elif event.key() == Qt.Key.Key_Space:
+                    # press Space to set anchor
+                    self.setAnchor()
+
             # Shift modifier allows for 5 pixel size adjustments to selected rectangle:
             elif event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
                 if event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_A:
@@ -1384,6 +1399,10 @@ class MainWindow(QMainWindow):
                                                  item[0].rect().width(),
                                                  item[0].rect().height()]
                     self.anno_coordTxt.setText(str(self.item_coords[self.current_key]))
+
+                elif event.key() == Qt.Key.Key_Space:
+                    # press Space to set anchor
+                    self.setAnchor()
 
             # Without any modifier, the position of the rectangle can be adjusted in 1 pixel increments
             else:
