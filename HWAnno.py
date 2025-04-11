@@ -1,6 +1,7 @@
 import sys
 import os
 from pathlib import Path
+from tkinter.filedialog import dialogstates
 
 import pandas as pd
 import fitz
@@ -28,14 +29,14 @@ class GraphicsView(QGraphicsView):
 
     ## Below are functions to navigate the viewer (zoom in and out of scene, drag around)
     def wheelEvent(self, event):
-            angle = event.angleDelta().y()
-            if angle > 0:
-                self.scale(1.2, 1.2)  # Zoom in sensitivity
-            else:
-                self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
-            event.accept()
+           angle = event.angleDelta().y()
+           if angle > 0:
+               self.scale(1.2, 1.2)  # Zoom in sensitivity
+           else:
+               self.scale(1 / 1.2, 1 / 1.2)  # Zoom out sensitivity
+           event.accept()
 
-    ## Alternative to the wheelEvent from above, where zooming in and out only functions with the ctrl-modifier
+    ## Alternative to the wheelEvent from above; below, zooming in and out only functions with the ctrl-modifier
     # def wheelEvent(self, event):
     #     if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
     #         angle = event.angleDelta().y()
@@ -100,6 +101,9 @@ class MainWindow(QMainWindow):
 
         self.current_key = 'Dims'
         self.current_color = None
+        self.current_layer = None
+
+        self.layer_levels = dict()
 
         # dictionary that - for each page - stores all items placed on the page
         self.page_items = dict()
@@ -134,23 +138,20 @@ class MainWindow(QMainWindow):
         self.rect_x.setMaximum(1000)
         self.rect_x.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         rect_width = QLabel('Width of new item:')
-        rect_width.setAlignment(Qt.AlignmentFlag.AlignRight)
-        rect_width.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        rect_width.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.rect_y = QSpinBox()  # for height
         self.rect_y.setValue(50)
         self.rect_y.setMaximum(1000)
         self.rect_y.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         rect_height = QLabel('Height of new item:')
-        rect_height.setAlignment(Qt.AlignmentFlag.AlignRight)
-        rect_height.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        rect_height.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.rect_col = QComboBox()  # for color
         self.rect_col.addItems(['red', 'green', 'blue'])
         self.rect_col.currentIndexChanged.connect(self.setColor)
         rect_colLab = QLabel('Color:')
-        rect_colLab.setAlignment(Qt.AlignmentFlag.AlignRight)
-        rect_colLab.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        rect_colLab.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.rect_pen = QPen(Qt.GlobalColor.red)
         self.rect_pen.setWidth(1)
@@ -169,15 +170,14 @@ class MainWindow(QMainWindow):
 
         # set up grid layout for graphical side of application (mainly picture and item display)
         view_layout = QGridLayout()
-        view_layout.addWidget(rect_width, 0, 10)
-        view_layout.addWidget(self.rect_x, 0, 11)
-        view_layout.addWidget(rect_height, 0, 12)
-        view_layout.addWidget(self.rect_y, 0, 13)
-        view_layout.addWidget(rect_colLab, 0, 14)
-        view_layout.addWidget(self.rect_col, 0, 15)
+        view_layout.addWidget(rect_width,       0, 10)
+        view_layout.addWidget(self.rect_x,      0, 11)
+        view_layout.addWidget(rect_height,      0, 12)
+        view_layout.addWidget(self.rect_y,      0, 13)
+        view_layout.addWidget(rect_colLab,      0, 14)
+        view_layout.addWidget(self.rect_col,    0, 15)
         view_layout.setColumnMinimumWidth(13, 10)
-
-        view_layout.addWidget(self.view_tabs, 1, 0, 1, 16)
+        view_layout.addWidget(self.view_tabs, 2, 0, 1, 16)
 
         view_widget = QWidget()
         view_widget.setLayout(view_layout)
@@ -197,6 +197,7 @@ class MainWindow(QMainWindow):
 
         self.anno_indexLab = QPushButton('Item index:')
         self.anno_indexLab.setStatusTip('Change index of currently selected item')
+        self.anno_indexLab.pressed.connect(self.updateIndex)
         self.anno_indexTxt = QLabel('No item selected')
 
         self.anno_coordLab = QPushButton('Coordinates:')
@@ -205,46 +206,46 @@ class MainWindow(QMainWindow):
         self.anno_anchorLab = QPushButton('Anchor:')
         self.anno_anchorTxt = QLabel('No item selected')
 
-        # self.anno_pageLab.pressed.connect(self.change_page)
-        self.anno_indexLab.pressed.connect(self.updateIndex)
-
-        anno_top_widget.addWidget(self.anno_sheetLab, 0, 0)
-        anno_top_widget.addWidget(self.anno_sheetTxt, 0, 1)
-        anno_top_widget.addWidget(self.anno_pageLab, 1, 0)
-        anno_top_widget.addWidget(self.anno_pageTxt, 1, 1)
-        anno_top_widget.addWidget(self.anno_indexLab, 2, 0)
-        anno_top_widget.addWidget(self.anno_indexTxt, 2, 1)
-        anno_top_widget.addWidget(self.anno_coordLab, 3, 0)
-        anno_top_widget.addWidget(self.anno_coordTxt, 3, 1)
-        anno_top_widget.addWidget(self.anno_anchorLab, 4, 0)
-        anno_top_widget.addWidget(self.anno_anchorTxt, 4, 1)
+        anno_top_widget.addWidget(self.anno_sheetLab,   0, 0)
+        anno_top_widget.addWidget(self.anno_sheetTxt,   0, 1)
+        anno_top_widget.addWidget(self.anno_pageLab,    1, 0)
+        anno_top_widget.addWidget(self.anno_pageTxt,    1, 1)
+        anno_top_widget.addWidget(self.anno_indexLab,   2, 0)
+        anno_top_widget.addWidget(self.anno_indexTxt,   2, 1)
+        anno_top_widget.addWidget(self.anno_coordLab,   3, 0)
+        anno_top_widget.addWidget(self.anno_coordTxt,   3, 1)
+        anno_top_widget.addWidget(self.anno_anchorLab,  4, 0)
+        anno_top_widget.addWidget(self.anno_anchorTxt,  4, 1)
 
         anno_title = QLabel('Annotation Layers')
         self.anno_new_layer_title = QLineEdit()
         self.anno_new_layer_title.setPlaceholderText('Enter new label')
-        anno_top_widget.addWidget(anno_title, 5, 0, 1, 2)
-        anno_top_widget.addWidget(self.anno_new_layer_title, 6, 0, 1, 2)
+        anno_top_widget.addWidget(anno_title,                   5, 0, 1, 2)
+        anno_top_widget.addWidget(self.anno_new_layer_title,    6, 0, 1, 2)
 
-        # BOT WIDGET
+        # BOTTOM WIDGET
         self.anno_bot_widget = QHBoxLayout()
         self.anno_bot_widgetLabs = QVBoxLayout()
         self.anno_bot_widgetLabs.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         self.anno_bot_widgetTxts = QVBoxLayout()
         self.anno_bot_widgetTxts.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         self.anno_bot_widget.addLayout(self.anno_bot_widgetLabs)
         self.anno_bot_widget.addLayout(self.anno_bot_widgetTxts)
+
         self.annotations = QWidget()
         self.annotations.setLayout(self.anno_bot_widget)
 
         # TOP AND BOT COMBINED
         anno_full = QVBoxLayout()
-        anno_full.addLayout(anno_top_widget, stretch=1)
-        anno_full.addWidget(self.annotations, stretch=4)
+        anno_full.addLayout(anno_top_widget,    stretch=1)
+        anno_full.addWidget(self.annotations,   stretch=4)
 
         # FINAL LAYOUT
         main_layout = QHBoxLayout()
-        main_layout.addWidget(view_widget, stretch=5)
-        main_layout.addLayout(anno_full, stretch=2)
+        main_layout.addWidget(view_widget,  stretch=5)
+        main_layout.addLayout(anno_full,    stretch=2)
 
         container = QWidget()
         container.setLayout(main_layout)
@@ -320,6 +321,20 @@ class MainWindow(QMainWindow):
         # this Signal triggers updating all annotation input lines to match the currently selected rectangle:
         self.scene.selectionChanged.connect(self.changeKey)
         self.anchorStatus = False
+
+        self.annotation_mode = False
+        self.level_index = 0
+        self.level_text = None
+        self.annotation_text = QLabel()
+        self.annotation_text.setStyleSheet('color: red')
+        self.annotation_text.hide()
+
+        self.annotation_level = QPushButton()
+        self.annotation_level.pressed.connect(self.setLevel)
+        self.annotation_level.hide()
+
+        view_layout.addWidget(self.annotation_text,     0, 0, 1, 1)
+        view_layout.addWidget(self.annotation_level,    0, 1, 1, 1)
 
     '''
     ((3)) CUSTOM FUNCTIONS
@@ -743,6 +758,11 @@ class MainWindow(QMainWindow):
 
                 self.anchorStatus = True
 
+            if self.annotation_mode:
+                layer_index = self.annotation_layers['Dims'].index(self.current_layer)
+                self.anno_bot_widgetTxts.itemAt(layer_index).widget().setText(self.level_text)
+                self.item_dict[self.current_key][layer_index] = self.level_text
+
         ## this triggers whenever a rectangle is de-selected (i.e. nothing is selected):
         else:
             if self.current_key != 'Dims':
@@ -993,40 +1013,92 @@ class MainWindow(QMainWindow):
 
     # opens dialog for changing the label of an annotation layer
     def editLayer(self):
-        self.sender_btn = self.sender().text()
+        self.current_layer = self.sender().text()
 
         dialog = QDialog(self)
-        dialog.setWindowTitle('Change Label')
+        dialog.setWindowTitle('Set categorical annotation layer')
 
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel('Change label of current annotation layer'))
-        layout.addWidget(QLabel('Current label: ' + self.sender_btn))
+        layout = QGridLayout()
+        layout.addWidget(QLabel('Make the "%s" annotation layer a categorical variable' % self.current_layer), 0, 0, 1, 2)
 
-        self.new_label = QLineEdit()
-        self.new_label.setPlaceholderText('Enter new label')
-        layout.addWidget(self.new_label)
+        self.factor_levels = QLineEdit()
+        self.factor_levels.setPlaceholderText('Enter all factor levels, separated by a comma (e.g.: Level 1, Level 2, ...)')
 
         confirm_button = QPushButton('Confirm')
-        confirm_button.pressed.connect(self.renameLayer)
+        confirm_button.pressed.connect(self.setCategoricalLayer)
         confirm_button.pressed.connect(dialog.accept)
 
-        layout.addWidget(confirm_button)
+        cancel_button = QPushButton('Cancel')
+        cancel_button.pressed.connect(dialog.accept)
+
+        layout.addWidget(self.factor_levels,    1, 0, 1, 2)
+        layout.addWidget(confirm_button,        2, 0, 1, 1)
+        layout.addWidget(cancel_button,         2, 1, 1, 1)
 
         dialog.setLayout(layout)
         dialog.exec()
 
-    # this function eventually changes the label of the annotation layer
-    def renameLayer(self):
+    def setCategoricalLayer(self):
         widgets = self.anno_bot_widgetLabs.count()
         for i in range(widgets):
-            if self.anno_bot_widgetLabs.itemAt(i).widget().text() == self.sender_btn:
+            if self.anno_bot_widgetLabs.itemAt(i).widget().text() == self.current_layer:
+
+                self.layer_levels[self.current_layer] = self.factor_levels.text().split(',')
+
+                self.anno_bot_widgetLabs.itemAt(i).widget().pressed.disconnect(self.editLayer)
+                self.anno_bot_widgetLabs.itemAt(i).widget().pressed.connect(self.annotationModeToggle)
+
+                self.anno_bot_widgetLabs.itemAt(i).widget().setCheckable(True)
+                self.anno_bot_widgetLabs.itemAt(i).widget().setStyleSheet(''' 
+                QPushButton:checked {background-color: darkred} ''')
                 break
 
-        self.anno_bot_widgetLabs.itemAt(i).widget().setText(self.new_label.text())
+    def annotationModeToggle(self):
+        self.current_layer = self.sender().text()
+        widgets = self.anno_bot_widgetLabs.count()
+        for i in range(widgets):
+            if self.anno_bot_widgetLabs.itemAt(i).widget().text() == self.current_layer:
+                if not self.anno_bot_widgetLabs.itemAt(i).widget().isChecked():
+                    self.annotation_mode = True
 
-        # this updates the annotation layers dictionary
-        for i in range(len(self.annotation_layers['Dims'])):
-            self.annotation_layers['Dims'][i] = self.anno_bot_widgetLabs.itemAt(i).widget().text()
+                    self.level_index = 0
+                    self.level_text = self.layer_levels[self.current_layer][0]
+
+                    # annotation_text = self.scene.addText('ANNOTATION MODE ON (%s)' % self.current_layer)
+                    # annotation_text.setPen(QColor('darkred'))
+                    # annotation_text.setPos(0, 0)
+
+                    text = '          ANNOTATION MODE ON (%s) - CURRENT LEVEL:' % self.current_layer
+                    self.annotation_text.setText(text)
+                    self.annotation_text.show()
+
+                    self.annotation_level.setText(self.level_text)
+                    self.annotation_level.show()
+
+
+                else:
+                    self.annotation_mode = False
+                    self.annotation_text.hide()
+                    self.annotation_level.hide()
+            else:
+                if self.anno_bot_widgetLabs.itemAt(i).widget().isChecked():
+                    self.anno_bot_widgetLabs.itemAt(i).widget().setChecked(False)
+
+    def setLevel(self):
+        self.level_index += 1
+        if len(self.layer_levels[self.current_layer]) - 1 < self.level_index:
+            self.level_index = 0
+        self.level_text = self.layer_levels[self.current_layer][self.level_index]
+        item = self.scene.selectedItems()
+
+        text = '          ANNOTATION MODE ON (%s) - CURRENT LEVEL:' % self.current_layer
+        self.annotation_text.setText(text)
+        self.annotation_level.setText(self.level_text)
+
+        if len(item) == 1:
+            layer_index = self.annotation_layers['Dims'].index(self.current_layer)
+            self.anno_bot_widgetTxts.itemAt(layer_index).widget().setText(self.level_text)
+            self.item_dict[self.current_key][layer_index] = self.level_text
 
     # this function keeps the dictionary with the item specific annotations updated
     def updateAnnotations(self):
@@ -1143,13 +1215,14 @@ class MainWindow(QMainWindow):
 
         layout = QGridLayout()
         layout.addWidget(QLabel('Save Screenshots'), 0, 1)
+
         current_button = QPushButton('For current page only')
         document_button = QPushButton('For whole document')
         cancel_button = QPushButton('Cancel')
 
-        layout.addWidget(current_button, 1, 0)
-        layout.addWidget(document_button, 1, 1)
-        layout.addWidget(cancel_button, 1, 2)
+        layout.addWidget(current_button,    1, 0)
+        layout.addWidget(document_button,   1, 1)
+        layout.addWidget(cancel_button,     1, 2)
 
         current_button.pressed.connect(dialog.accept)
         current_button.pressed.connect(self.screenshotPage)
@@ -1293,6 +1366,10 @@ class MainWindow(QMainWindow):
             if event.key() == Qt.Key.Key_Return:
                 self.addAnnotationLayer()
                 self.anno_new_layer_title.setText('')
+
+        if self.annotation_mode:
+            if event.key() == Qt.Key.Key_F1:
+                self.setLevel()
 
         # Below are KeyPressEvents that modify a selected rectangle
         item = self.scene.selectedItems()
@@ -1446,7 +1523,7 @@ class MainWindow(QMainWindow):
                     # press Space to set anchor
                     self.setAnchor()
 
-        # pressing/releasing Alt (without any modifier) has to purposes:
+        # pressing/releasing Alt (without any modifier) has two purposes:
         # (1) it toggles all items movable on pressing alt / immovable on releasing alt
         # (2) if an item is selected, it places another rectangle on top, which can be dragged around to adjust the size
         # of the selected item; this adjustment happens on release of Alt
